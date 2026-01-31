@@ -69,35 +69,191 @@ jobs:
             console.log(`Processing PR #${number}: ${title}`);
 
       # ------------------------------------------
-      # Step 3: Generate release notes markdown
+      # Step 3: Prepare PR info for Claude
       # ------------------------------------------
-      - name: Generate release notes
+      - name: Prepare PR info file
         run: |
           PR_TITLE=$(cat pr_title.txt)
           PR_NUMBER=$(cat pr_number.txt)
-          PR_URL=$(cat pr_url.txt)
           PR_AUTHOR=$(cat pr_author.txt)
           PR_DATE=$(date -d "$(cat pr_merged_at.txt)" '+%Y-%m-%d' 2>/dev/null || cat pr_merged_at.txt)
+          PR_BODY=$(cat pr_body.md)
 
-          cat > /tmp/release-notes.md << EOF
-          # Release Notes - PR #${PR_NUMBER}
-
-          **${PR_TITLE}**
-
+          cat > pr_context.md << EOF
+          ## PR Information
+          - **Title:** ${PR_TITLE}
+          - **Number:** #${PR_NUMBER}
           - **Author:** ${PR_AUTHOR}
-          - **Merged:** ${PR_DATE}
-          - **PR:** ${PR_URL}
+          - **Date:** ${PR_DATE}
 
-          ---
-
-          $(cat pr_body.md)
+          ## PR Body
+          ${PR_BODY}
           EOF
 
-          echo "Release notes generated"
-          cat /tmp/release-notes.md
+      # ------------------------------------------
+      # Step 4: Format release notes with Claude
+      # ------------------------------------------
+      - name: Format release notes with Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are a product communications specialist tasked with creating comprehensive Release Notes from a Pull Request document.
+
+            Read the PR context from `pr_context.md` file.
+
+            ## Instructions
+            Convert the provided Pull Request (PR) document into Release Notes in Markdown format (.md) that includes BOTH client-facing content AND internal-only technical details. Follow this exact structure:
+
+            ---
+            # Release Notes
+            **Release Date:** [Date]
+            ---
+            ## Overview
+            Provide a compelling 2-4 sentence summary that:
+            - Highlights the most important changes from a user perspective
+            - Focuses on benefits and value to users
+            - Uses clear, non-technical language
+            - Creates excitement about the improvements
+            ---
+            ## [Category Name 1]
+            ### [Feature/Enhancement Name]
+            [2-3 sentences describing what this feature does and why it matters to users]
+            **Key Capabilities:**
+            - [Capability 1 with user benefit]
+            - [Capability 2 with user benefit]
+            - [Capability 3 with user benefit]
+            **[Sub-feature Name]** – [Brief description]
+            - [Detail 1]
+            - [Detail 2]
+            ---
+            ## [Category Name 2]
+            [Continue with same pattern for all user-facing features]
+            ---
+            ## Bug Fixes
+            ### [Area/Feature Name]
+            - **[Fix description]:** [Brief explanation of what was resolved]
+            - **[Fix description]:** [Brief explanation of what was resolved]
+            ---
+            <!-- INTERNAL_ONLY_START -->
+            ## Internal-Only Changes
+            **🔒 This section contains technical details for internal teams only and should not be included in client-facing documentation.**
+            ---
+            ### Technical Implementation Details
+            **Backend Changes:**
+            - [Database schema modifications]
+            - [API internal restructuring]
+            - [Service architecture updates]
+            - [Code refactoring details]
+            **Infrastructure Updates:**
+            - [Configuration changes]
+            - [Environment variable updates]
+            - [Deployment process modifications]
+            - [Server/cloud infrastructure changes]
+            **Performance Optimizations:**
+            - [Internal performance improvements that don't change user experience]
+            - [Query optimizations]
+            - [Caching improvements]
+            - [Resource utilization enhancements]
+            ---
+            ### Development & Tooling
+            **Development Environment:**
+            - [Development setup changes]
+            - [Local environment updates]
+            - [Developer tool improvements]
+            **CI/CD Pipeline:**
+            - [Build process updates]
+            - [Deployment automation changes]
+            - [Testing pipeline improvements]
+            **Code Quality:**
+            - [Refactoring initiatives]
+            - [Code cleanup]
+            - [Technical debt reduction]
+            - [Linting/formatting rule updates]
+            ---
+            ### Dependencies & Libraries
+            **New Dependencies:**
+            - [Package name and version] - [Purpose and reason for addition]
+            **Updated Dependencies:**
+            - [Package name: old version → new version] - [Reason for update]
+            **Removed Dependencies:**
+            - [Package name] - [Reason for removal and replacement]
+            **Security Updates:**
+            - [Security patch details]
+            - [Vulnerability fixes]
+            ---
+            ### Database & Data Management
+            **Schema Changes:**
+            - [Table modifications]
+            - [Index additions/removals]
+            - [Constraint updates]
+            **Migration Scripts:**
+            - [Migration file names and purposes]
+            - [Data transformation details]
+            ---
+            ### Testing & Quality Assurance
+            **Test Coverage:**
+            - [New unit tests added]
+            - [Integration test updates]
+            **Testing Infrastructure:**
+            - [Test environment changes]
+            ---
+            ### Security & Compliance (Internal)
+            **Security Improvements:**
+            - [Internal security enhancements]
+            - [Vulnerability patches]
+            ---
+            ### Monitoring & Observability
+            **Logging:**
+            - [New log points added]
+            - [Log format updates]
+            **Metrics & Alerts:**
+            - [New metrics tracked]
+            - [Alert threshold updates]
+            ---
+            ### Migration & Backward Compatibility (Technical)
+            **Data Migration:**
+            - [Automated migration scripts executed]
+            - [Data transformation logic]
+            **API Compatibility:**
+            - [Breaking changes to internal APIs]
+            - [Deprecation timeline for internal endpoints]
+            ---
+            <!-- INTERNAL_ONLY_END -->
+            ---
+
+            ## CRITICAL FORMATTING RULES:
+            1. **Internal-Only Section Delimiters:** ALWAYS wrap the internal-only section with `<!-- INTERNAL_ONLY_START -->` and `<!-- INTERNAL_ONLY_END -->`
+            2. Use benefit-focused language for client-facing sections
+            3. Keep technical details only in the Internal-Only section
+            4. Remove all technical jargon from client-facing sections
+            5. Focus on "what" and "why" for users, "how" for internal teams
+
+            **Write the formatted release notes to `/tmp/formatted-release-notes.md`**
+          claude_args: >-
+            --max-turns 10
+            --model claude-sonnet-4-5-20250929
+            --allowedTools Write,Read
+          github_token: ${{ secrets.PAT_TOKEN }}
 
       # ------------------------------------------
-      # Step 4: Send release notes to Slack
+      # Step 5: Extract client-facing release notes
+      # ------------------------------------------
+      - name: Extract client-facing release notes
+        run: |
+          # Extract only the client-facing portion (everything before INTERNAL_ONLY_START)
+          if [ -f /tmp/formatted-release-notes.md ]; then
+            sed -n '1,/<!-- INTERNAL_ONLY_START -->/p' /tmp/formatted-release-notes.md | head -n -1 > /tmp/client-release-notes.md
+            echo "Client-facing release notes extracted"
+            cat /tmp/client-release-notes.md
+          else
+            # Fallback to original PR body if formatting failed
+            echo "Using original PR body as fallback"
+            cat pr_body.md > /tmp/client-release-notes.md
+          fi
+
+      # ------------------------------------------
+      # Step 6: Send release notes to Slack
       # ------------------------------------------
       - name: Send release notes to Slack
         env:
@@ -107,7 +263,9 @@ jobs:
           PR_NUMBER=$(cat pr_number.txt)
           PR_URL=$(cat pr_url.txt)
           PR_AUTHOR=$(cat pr_author.txt)
-          PR_BODY=$(cat pr_body.md)
+
+          # Use formatted client-facing notes
+          PR_BODY=$(cat /tmp/client-release-notes.md)
 
           # Truncate body for Slack (max ~2500 chars per block)
           PR_BODY_TRUNCATED="${PR_BODY:0:2500}"
@@ -158,7 +316,7 @@ jobs:
           echo "Slack notification sent"
 
       # ------------------------------------------
-      # Step 5: Send release notes via email (AWS SES)
+      # Step 7: Send release notes via email (AWS SES)
       # ------------------------------------------
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -174,7 +332,9 @@ jobs:
         run: |
           PR_TITLE=$(cat pr_title.txt)
           PR_NUMBER=$(cat pr_number.txt)
-          RELEASE_NOTES=$(cat /tmp/release-notes.md)
+
+          # Use formatted client-facing notes
+          RELEASE_NOTES=$(cat /tmp/client-release-notes.md)
 
           # Build JSON-safe email body
           EMAIL_BODY=$(echo "$RELEASE_NOTES" | jq -Rs '.')
