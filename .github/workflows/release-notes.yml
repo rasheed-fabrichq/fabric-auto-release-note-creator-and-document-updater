@@ -241,58 +241,36 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
-            A pull request was merged in the SOURCE code repository. Update the DOCUMENTATION repository.
+            A pull request was merged in the SOURCE code repository. Update the DOCUMENTATION repository accordingly.
 
             ## Source PR Details
-
-            - **Title:** ${{ needs.release-notes.outputs.pr_title }}
-            - **PR:** #${{ needs.release-notes.outputs.pr_number }}
+            - **PR #${{ needs.release-notes.outputs.pr_number }}:** ${{ needs.release-notes.outputs.pr_title }}
             - **Author:** ${{ needs.release-notes.outputs.pr_author }}
             - **Link:** ${{ needs.release-notes.outputs.pr_url }}
 
             ## PR Description
-
             ${{ github.event.pull_request.body }}
 
-            ## Repository Locations
+            ## Task
+            1. **Read source code:** `source-repo/src/app.js` to verify actual changes
+            2. **Read all docs:** `docs-repo/docs/*.md` files
+            3. **Create comparison report:** Write to `docs-repo/comparison-report.md` with:
+               - Items to ADD (new features not documented)
+               - Items to UPDATE (changed values: old → new)
+               - Items to DELETE (removed features still in docs)
+               - Changes by file
+            4. **Update documentation files** in `docs-repo/docs/` to match the code:
+               - Update changed values (prices, timeouts, limits, etc.)
+               - Add new feature sections
+               - Remove deprecated feature sections
+               - Update version history in index.md
+               - Keep existing formatting
 
-            - **Source code:** source-repo/src/
-            - **Documentation:** docs-repo/docs/
-
-            ## Instructions
-
-            1. Read the source code in `source-repo/src/` to understand what changed
-            2. Read all documentation files in `docs-repo/docs/` folder
-            3. Compare the PR description and code changes against the documentation
-            4. Write a comparison report to `docs-repo/comparison-report.md` with this format:
-
-               ## Documentation Comparison Report
-
-               ### Items to ADD (new features not yet documented)
-               - [list items]
-
-               ### Items to UPDATE (existing docs needing value/text changes)
-               - [list items with old value -> new value]
-
-               ### Items to DELETE (removed features still in docs)
-               - [list items]
-
-               ### Changes by File
-               For each file, list the specific edits made.
-
-            5. Edit the documentation files in `docs-repo/docs/` to reflect the changes:
-               - Update values that changed (e.g., expiry times, prices)
-               - Add sections for new features
-               - Remove sections for deleted features
-               - Update the version history in index.md
-               - Preserve existing formatting and structure
-
-            Be precise. Only change what the PR description and code changes indicate.
-            Do NOT invent changes that are not supported by the PR.
+            **Important:** Only change what the PR description explicitly mentions. Don't invent changes.
           claude_args: >-
-            --max-turns 15
+            --max-turns 30
             --model claude-sonnet-4-5-20250929
-            --allowedTools Edit,MultiEdit,Write,Read,Glob,Grep,Bash(git:*)
+            --allowedTools Edit,Write,Read,Glob,Grep,Bash(git:*)
           github_token: ${{ secrets.PAT_TOKEN }}
 
       # ------------------------------------------
