@@ -495,13 +495,17 @@ jobs:
           PR_TITLE=$(cat pr_title.txt)
           PR_NUMBER=$(cat pr_number.txt)
 
+          # Parse comma-separated recipients and build JSON array
+          IFS=',' read -ra RECIPIENTS <<< "$SES_RECIPIENT"
+          RECIPIENT_JSON=$(printf '%s\n' "${RECIPIENTS[@]}" | jq -R . | jq -s .)
+
           # Use HTML email if available, fallback to plain text
           if [ -f /tmp/email-body.html ]; then
             EMAIL_HTML=$(cat /tmp/email-body.html | jq -Rs '.')
 
             aws sesv2 send-email \
               --from-email-address "$SES_SENDER" \
-              --destination "{\"ToAddresses\":[\"$SES_RECIPIENT\"]}" \
+              --destination "{\"ToAddresses\":${RECIPIENT_JSON}}" \
               --content "{
                 \"Simple\": {
                   \"Subject\": {\"Data\": \"[Release] PR #${PR_NUMBER} - ${PR_TITLE}\"},
@@ -517,7 +521,7 @@ jobs:
 
             aws sesv2 send-email \
               --from-email-address "$SES_SENDER" \
-              --destination "{\"ToAddresses\":[\"$SES_RECIPIENT\"]}" \
+              --destination "{\"ToAddresses\":${RECIPIENT_JSON}}" \
               --content "{
                 \"Simple\": {
                   \"Subject\": {\"Data\": \"[Release] PR #${PR_NUMBER} - ${PR_TITLE}\"},
@@ -528,7 +532,7 @@ jobs:
               }"
           fi
 
-          echo "Email sent via AWS SES"
+          echo "Email sent to ${#RECIPIENTS[@]} recipient(s) via AWS SES"
 
   # ============================================
   # JOB 2: Compare and update documentation (in separate repo)
