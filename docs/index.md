@@ -39,8 +39,9 @@ All endpoints use the base URL:
 
 ## Version History
 
-| Version | Date         | Changes                          |
-|---------|--------------|----------------------------------|
-| 2.0     | January 2026 | JWT auth, new billing tiers      |
-| 1.5     | October 2025 | Added password reset             |
-| 1.0     | July 2025    | Initial release with basic auth  |
+| Version | Date         | Changes                                            |
+|---------|--------------|---------------------------------------------------|
+| 2.1     | January 2026 | Enhanced security (10-char passwords), Pro pricing |
+| 2.0     | January 2026 | JWT auth, new billing tiers                        |
+| 1.5     | October 2025 | Added password reset                               |
+| 1.0     | July 2025    | Initial release with basic auth                    |
