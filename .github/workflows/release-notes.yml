@@ -194,7 +194,7 @@ jobs:
           echo "Email sent via AWS SES"
 
   # ============================================
-  # JOB 2: Compare and update documentation
+  # JOB 2: Compare and update documentation (in separate repo)
   # ============================================
   update-docs:
     needs: release-notes
@@ -203,36 +203,48 @@ jobs:
 
     steps:
       # ------------------------------------------
-      # Step 1: Checkout with push access
+      # Step 1: Checkout documentation repository
       # ------------------------------------------
-      - name: Checkout repository
+      - name: Checkout documentation repository
         uses: actions/checkout@v4
         with:
+          repository: rasheed-fabrichq/fabric-auto-release-notes-docs
           token: ${{ secrets.PAT_TOKEN }}
+          path: docs-repo
           fetch-depth: 0
 
       # ------------------------------------------
-      # Step 2: Create branch for doc updates
+      # Step 2: Checkout source repository for code context
+      # ------------------------------------------
+      - name: Checkout source repository
+        uses: actions/checkout@v4
+        with:
+          path: source-repo
+          fetch-depth: 0
+
+      # ------------------------------------------
+      # Step 3: Create branch in docs repo
       # ------------------------------------------
       - name: Create documentation update branch
         run: |
+          cd docs-repo
           PR_NUMBER="${{ needs.release-notes.outputs.pr_number }}"
           BRANCH_NAME="docs/auto-update-pr-${PR_NUMBER}"
           git checkout -b "$BRANCH_NAME"
           echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
 
       # ------------------------------------------
-      # Step 3: Use Claude to analyze and update docs
+      # Step 4: Use Claude to analyze and update docs
       # ------------------------------------------
       - name: Analyze and update documentation with Claude
+        working-directory: docs-repo
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
-            A pull request has been merged. Your task is to compare the release
-            notes with the current documentation and update the docs accordingly.
+            A pull request was merged in the SOURCE code repository. Update the DOCUMENTATION repository.
 
-            ## Merged PR Details
+            ## Source PR Details
 
             - **Title:** ${{ needs.release-notes.outputs.pr_title }}
             - **PR:** #${{ needs.release-notes.outputs.pr_number }}
@@ -243,10 +255,15 @@ jobs:
 
             ${{ github.event.pull_request.body }}
 
+            ## Repository Locations
+
+            - **Source code:** ../source-repo/src/
+            - **Documentation (current repo):** ./docs/
+
             ## Instructions
 
-            1. Read all documentation files in the `docs/` folder
-            2. Read the source code in `src/` to understand what actually changed
+            1. Read the source code in `../source-repo/src/` to understand what changed
+            2. Read all documentation files in `./docs/` folder
             3. Compare the PR description and code changes against the documentation
             4. Write a comparison report to `comparison-report.md` in the repo root with this format:
 
@@ -264,7 +281,7 @@ jobs:
                ### Changes by File
                For each file, list the specific edits made.
 
-            5. Edit the documentation files in `docs/` to reflect the changes:
+            5. Edit the documentation files in `./docs/` to reflect the changes:
                - Update values that changed (e.g., expiry times, prices)
                - Add sections for new features
                - Remove sections for deleted features
@@ -280,10 +297,11 @@ jobs:
           github_token: ${{ secrets.PAT_TOKEN }}
 
       # ------------------------------------------
-      # Step 4: Check if documentation was changed
+      # Step 5: Check if documentation was changed
       # ------------------------------------------
       - name: Check for documentation changes
         id: check_changes
+        working-directory: docs-repo
         run: |
           if git diff --quiet docs/; then
             echo "has_changes=false" >> $GITHUB_OUTPUT
@@ -295,13 +313,14 @@ jobs:
           fi
 
       # ------------------------------------------
-      # Step 5: Post comparison report to Slack
+      # Step 6: Post comparison report to Slack
       # ------------------------------------------
       - name: Post comparison report to Slack
         if: steps.check_changes.outputs.has_changes == 'true'
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
+          cd docs-repo
           PR_NUMBER="${{ needs.release-notes.outputs.pr_number }}"
           PR_TITLE="${{ needs.release-notes.outputs.pr_title }}"
           PR_URL="${{ needs.release-notes.outputs.pr_url }}"
@@ -365,10 +384,11 @@ jobs:
           echo "Documentation comparison posted to Slack"
 
       # ------------------------------------------
-      # Step 6: Commit, push, and create PR
+      # Step 7: Commit, push, and create PR in docs repo
       # ------------------------------------------
       - name: Create documentation update PR
         if: steps.check_changes.outputs.has_changes == 'true'
+        working-directory: docs-repo
         env:
           GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
@@ -387,9 +407,9 @@ jobs:
             git add comparison-report.md
           fi
 
-          git commit -m "docs: update documentation for PR #${PR_NUMBER} - ${PR_TITLE}"
+          git commit -m "docs: update for source PR #${PR_NUMBER} - ${PR_TITLE}"
 
-          # Push branch
+          # Push branch to docs repo
           git push origin "$BRANCH_NAME"
 
           # Build PR body
@@ -399,15 +419,17 @@ jobs:
             REPORT="Documentation files were updated. Please review the changes."
           fi
 
-          # Create PR
+          # Create PR in the DOCS repository
           gh pr create \
-            --title "docs: Update documentation for PR #${PR_NUMBER}" \
+            --repo rasheed-fabrichq/fabric-auto-release-notes-docs \
+            --title "docs: Update for source PR #${PR_NUMBER}" \
             --body "$(cat <<EOF
           ## Automated Documentation Update
 
-          This PR was automatically generated after merging PR #${PR_NUMBER}.
+          This PR was automatically generated after merging PR #${PR_NUMBER} in the source code repository.
 
           ### Source PR
+          - **Repository:** rasheed-fabrichq/fabric-auto-release-note-creator-and-document-updater
           - **Title:** ${PR_TITLE}
           - **Author:** @${PR_AUTHOR}
           - **Link:** ${PR_URL}
