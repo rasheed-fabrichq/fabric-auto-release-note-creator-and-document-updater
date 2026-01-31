@@ -58,6 +58,20 @@ SecureAPI currently accepts the following payment methods:
 - **PayPal** - Accepted for all billing tiers
 - **Stripe** - Accepted for all billing tiers
 
+### Retrieving Available Payment Methods
+
+To get a list of all supported payment methods programmatically:
+
+    GET /api/v2/billing/payment-methods
+
+**Response:**
+
+```json
+{
+  "methods": ["credit_card", "bank_transfer", "paypal", "stripe"]
+}
+```
+
 ## Changing Your Plan
 
 To upgrade or downgrade your plan:

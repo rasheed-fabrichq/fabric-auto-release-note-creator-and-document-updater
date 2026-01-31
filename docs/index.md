@@ -25,7 +25,7 @@ All endpoints use the base URL:
 
 ### Key Features
 
-- **JWT Authentication** - Secure token-based auth with 24-hour expiry
+- **JWT Authentication** - Secure token-based auth with 48-hour expiry
 - **Password Reset** - Email-based password recovery
 - **Flexible Billing** - Four pricing tiers from Free to Enterprise
 - **Invoice Management** - Monthly invoices generated on the 1st

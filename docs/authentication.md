@@ -30,7 +30,7 @@ in the Authorization header:
 ```json
 {
   "token": "eyJhbGciOiJIUzI1NiIs...",
-  "expiresIn": "24h",
+  "expiresIn": "48h",
   "tokenType": "Bearer"
 }
 ```
@@ -40,9 +40,9 @@ in the Authorization header:
 | Parameter            | Value          | Description                       |
 |----------------------|----------------|-----------------------------------|
 | Token Type           | Bearer         | Only Bearer tokens are supported  |
-| Expiry Duration      | 24 hours       | Tokens expire after 24 hours      |
+| Expiry Duration      | 48 hours       | Tokens expire after 48 hours      |
 | Algorithm            | HS256          | HMAC with SHA-256                 |
-| Max Login Attempts   | 5              | Account locks after 5 failures    |
+| Max Login Attempts   | 10             | Account locks after 10 failures   |
 | Lockout Duration     | 15 minutes     | Automatic unlock after 15 minutes |
 | Min Password Length  | 10 characters  | Minimum password requirement      |
 
@@ -53,7 +53,7 @@ Before your token expires, you can refresh it:
     POST /api/v2/auth/refresh
 
 Include the current valid token in the Authorization header. A new token will
-be returned with a fresh 24-hour expiry.
+be returned with a fresh 48-hour expiry.
 
 ## Password Reset
 
@@ -71,6 +71,37 @@ To reset a forgotten password:
 
 A password reset link will be sent to the registered email address. The link
 expires after 1 hour.
+
+## Google OAuth Authentication
+
+SecureAPI supports authentication via Google OAuth. This allows users to
+authenticate using their Google account credentials.
+
+### Google OAuth Endpoint
+
+    POST /api/v2/auth/oauth/google
+
+**Request Body:**
+
+```json
+{
+  "googleToken": "ya29.a0AfH6SMB..."
+}
+```
+
+**Successful Response (200):**
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "expiresIn": "48h",
+  "tokenType": "Bearer",
+  "provider": "google"
+}
+```
+
+The response includes a standard JWT token that can be used for subsequent API
+requests, just like tokens obtained through the regular login endpoint.
 
 ## Error Codes
 
