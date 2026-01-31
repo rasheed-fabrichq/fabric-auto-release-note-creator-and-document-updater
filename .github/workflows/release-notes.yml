@@ -316,7 +316,169 @@ jobs:
           echo "Slack notification sent"
 
       # ------------------------------------------
-      # Step 7: Send release notes via email (AWS SES)
+      # Step 7: Generate HTML email with Claude
+      # ------------------------------------------
+      - name: Generate HTML email with Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Convert the provided Release Notes into a concise internal team email announcing the release.
+
+            Read the full formatted release notes from `/tmp/formatted-release-notes.md` (includes both client-facing and internal-only content).
+
+            ## Output Format: Clean, professional HTML suitable for Gmail
+
+            Use this structure:
+            ```html
+            <html>
+            <head>
+              <style>
+                body {
+                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                  line-height: 1.6;
+                  color: #1f2937;
+                  background-color: #f9fafb;
+                  max-width: 800px;
+                  margin: 0 auto;
+                  padding: 40px 20px;
+                }
+                .container {
+                  background: #ffffff;
+                  border: 1px solid #e5e7eb;
+                  border-radius: 12px;
+                  padding: 40px;
+                  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+                }
+                .greeting {
+                  font-size: 16px;
+                  margin-bottom: 20px;
+                  color: #374151;
+                }
+                .intro {
+                  font-size: 15px;
+                  margin-bottom: 30px;
+                  color: #4b5563;
+                  line-height: 1.8;
+                }
+                h2 {
+                  color: #7c3aed;
+                  font-size: 19px;
+                  font-weight: 600;
+                  margin-top: 32px;
+                  margin-bottom: 16px;
+                  padding-bottom: 10px;
+                  border-bottom: 2px solid #ede9fe;
+                }
+                ul {
+                  list-style: none;
+                  padding-left: 0;
+                  margin: 16px 0;
+                }
+                li {
+                  padding: 14px 18px;
+                  margin-bottom: 10px;
+                  background: #faf5ff;
+                  border-left: 4px solid #a78bfa;
+                  border-radius: 6px;
+                  font-size: 14px;
+                  color: #374151;
+                  line-height: 1.6;
+                }
+                strong {
+                  color: #7c3aed;
+                  font-weight: 600;
+                }
+                .closing {
+                  margin-top: 32px;
+                  padding-top: 24px;
+                  border-top: 1px solid #e5e7eb;
+                  color: #4b5563;
+                  font-size: 15px;
+                  line-height: 1.7;
+                }
+                .signature {
+                  margin-top: 20px;
+                  color: #6b7280;
+                  font-size: 14px;
+                  line-height: 1.5;
+                }
+                .badge {
+                  display: inline-block;
+                  background: #ede9fe;
+                  color: #7c3aed;
+                  padding: 3px 10px;
+                  border-radius: 12px;
+                  font-size: 11px;
+                  font-weight: 600;
+                  margin-left: 6px;
+                  text-transform: uppercase;
+                }
+              </style>
+            </head>
+            <body>
+              <div class="container">
+                <p class="greeting">Hi Team,</p>
+
+                <p class="intro">[1-2 sentences: what shipped and why it matters]</p>
+
+                <h2>🚀 What We Shipped</h2>
+                <ul>
+                  <li><strong>[Feature Name]:</strong> [Description]</li>
+                  [5-8 bullets: key user-facing features]
+                </ul>
+
+                <h2>⚙️ What's Under the Hood</h2>
+                <ul>
+                  <li><strong>[Category]:</strong> [Technical details with metrics]</li>
+                  [5-7 bullets: technical changes, performance metrics, security patches - include CVE numbers]
+                </ul>
+
+                <h2>📋 What You Need to Know</h2>
+                <ul>
+                  <li><strong>[Topic]:</strong> [Important info]</li>
+                  [3-5 bullets: migrations, breaking changes, monitoring needs, rollback plans]
+                </ul>
+
+                <h2>🎯 Next Steps</h2>
+                <ul>
+                  <li>[Action item with timeframe]</li>
+                  [2-4 bullets: monitoring tasks, follow-up actions, future work]
+                </ul>
+
+                <p class="closing">[1-2 sentence closing thanking team and directing questions to #bug-reporting-and-feature-requests]</p>
+
+                <p class="signature">Best,<br>Release Automation Bot<br>Engineering Team</p>
+              </div>
+            </body>
+            </html>
+            ```
+
+            ## Guidelines:
+            - Keep total email 300-500 words
+            - Use <strong> for emphasis on feature/category names
+            - Include specific metrics where available (e.g., "72% → 78%", "450ms → 80ms")
+            - Add small badges with <span class="badge">SECURITY</span> for security-related items
+            - Highlight security updates with CVE numbers
+            - Flag anything requiring team attention
+            - Tone: professional but conversational, team-oriented
+            - Extract user features from client-facing content
+            - Extract technical details from content between `<!-- INTERNAL_ONLY_START -->` and `<!-- INTERNAL_ONLY_END -->`
+            - DO NOT include "Subject:" line in the output
+            - Direct questions/feedback to #bug-reporting-and-feature-requests channel
+            - Design uses white background with lavender accents for Gmail compatibility
+            - No dynamic effects (hover states, transitions) - static design only
+            - Optimized for readability with proper contrast and spacing
+
+            **Write the HTML email to `/tmp/email-body.html`**
+          claude_args: >-
+            --max-turns 8
+            --model claude-sonnet-4-5-20250929
+            --allowedTools Write,Read
+          github_token: ${{ secrets.PAT_TOKEN }}
+
+      # ------------------------------------------
+      # Step 8: Send release notes via email (AWS SES)
       # ------------------------------------------
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -333,23 +495,38 @@ jobs:
           PR_TITLE=$(cat pr_title.txt)
           PR_NUMBER=$(cat pr_number.txt)
 
-          # Use formatted client-facing notes
-          RELEASE_NOTES=$(cat /tmp/client-release-notes.md)
+          # Use HTML email if available, fallback to plain text
+          if [ -f /tmp/email-body.html ]; then
+            EMAIL_HTML=$(cat /tmp/email-body.html | jq -Rs '.')
 
-          # Build JSON-safe email body
-          EMAIL_BODY=$(echo "$RELEASE_NOTES" | jq -Rs '.')
-
-          aws sesv2 send-email \
-            --from-email-address "$SES_SENDER" \
-            --destination "{\"ToAddresses\":[\"$SES_RECIPIENT\"]}" \
-            --content "{
-              \"Simple\": {
-                \"Subject\": {\"Data\": \"[Release] PR #${PR_NUMBER} - ${PR_TITLE}\"},
-                \"Body\": {
-                  \"Text\": {\"Data\": ${EMAIL_BODY}}
+            aws sesv2 send-email \
+              --from-email-address "$SES_SENDER" \
+              --destination "{\"ToAddresses\":[\"$SES_RECIPIENT\"]}" \
+              --content "{
+                \"Simple\": {
+                  \"Subject\": {\"Data\": \"[Release] PR #${PR_NUMBER} - ${PR_TITLE}\"},
+                  \"Body\": {
+                    \"Html\": {\"Data\": ${EMAIL_HTML}}
+                  }
                 }
-              }
-            }"
+              }"
+          else
+            # Fallback to plain text
+            RELEASE_NOTES=$(cat /tmp/client-release-notes.md)
+            EMAIL_BODY=$(echo "$RELEASE_NOTES" | jq -Rs '.')
+
+            aws sesv2 send-email \
+              --from-email-address "$SES_SENDER" \
+              --destination "{\"ToAddresses\":[\"$SES_RECIPIENT\"]}" \
+              --content "{
+                \"Simple\": {
+                  \"Subject\": {\"Data\": \"[Release] PR #${PR_NUMBER} - ${PR_TITLE}\"},
+                  \"Body\": {
+                    \"Text\": {\"Data\": ${EMAIL_BODY}}
+                  }
+                }
+              }"
+          fi
 
           echo "Email sent via AWS SES"
 
