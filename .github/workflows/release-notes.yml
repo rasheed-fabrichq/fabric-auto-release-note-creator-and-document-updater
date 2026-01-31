@@ -237,7 +237,6 @@ jobs:
       # Step 4: Use Claude to analyze and update docs
       # ------------------------------------------
       - name: Analyze and update documentation with Claude
-        working-directory: docs-repo
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -257,15 +256,15 @@ jobs:
 
             ## Repository Locations
 
-            - **Source code:** ../source-repo/src/
-            - **Documentation (current repo):** ./docs/
+            - **Source code:** source-repo/src/
+            - **Documentation:** docs-repo/docs/
 
             ## Instructions
 
-            1. Read the source code in `../source-repo/src/` to understand what changed
-            2. Read all documentation files in `./docs/` folder
+            1. Read the source code in `source-repo/src/` to understand what changed
+            2. Read all documentation files in `docs-repo/docs/` folder
             3. Compare the PR description and code changes against the documentation
-            4. Write a comparison report to `comparison-report.md` in the repo root with this format:
+            4. Write a comparison report to `docs-repo/comparison-report.md` with this format:
 
                ## Documentation Comparison Report
 
@@ -281,7 +280,7 @@ jobs:
                ### Changes by File
                For each file, list the specific edits made.
 
-            5. Edit the documentation files in `./docs/` to reflect the changes:
+            5. Edit the documentation files in `docs-repo/docs/` to reflect the changes:
                - Update values that changed (e.g., expiry times, prices)
                - Add sections for new features
                - Remove sections for deleted features
