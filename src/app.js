@@ -9,10 +9,10 @@ app.use(express.json());
 // ============================================
 const CONFIG = {
   JWT_SECRET: process.env.JWT_SECRET || 'demo-secret-key',
-  JWT_EXPIRY: '24h',
+  JWT_EXPIRY: '48h',
   PORT: 3000,
   API_VERSION: 'v2',
-  MAX_LOGIN_ATTEMPTS: 5,
+  MAX_LOGIN_ATTEMPTS: 10,
   LOCKOUT_DURATION: 15 * 60 * 1000, // 15 minutes
   SUPPORTED_TOKEN_TYPES: ['Bearer'],
   PASSWORD_MIN_LENGTH: 8,
@@ -75,18 +75,28 @@ app.post('/api/v2/auth/refresh', authenticateToken, (req, res) => {
   });
 });
 
-// Password reset via email
-app.post('/api/v2/auth/reset-password', (req, res) => {
-  const { email } = req.body;
+// Google OAuth authentication
+app.post('/api/v2/auth/oauth/google', (req, res) => {
+  const { googleToken } = req.body;
 
-  if (!email) {
-    return res.status(400).json({ error: 'Email is required' });
+  if (!googleToken) {
+    return res.status(400).json({ error: 'Google token is required' });
   }
 
-  // Demo: always return success
+  // Demo: accept any google token and generate JWT
+  // In production, this would validate the token with Google's API
+  const email = 'user@example.com'; // Would be extracted from Google token
+  const userId = email.split('@')[0];
+
+  const token = jwt.sign({ userId, email, provider: 'google' }, CONFIG.JWT_SECRET, {
+    expiresIn: CONFIG.JWT_EXPIRY,
+  });
+
   res.json({
-    message: 'Password reset link sent to your email',
-    expiresIn: '1 hour',
+    token,
+    expiresIn: CONFIG.JWT_EXPIRY,
+    tokenType: 'Bearer',
+    provider: 'google',
   });
 });
 
@@ -115,13 +125,13 @@ function authenticateToken(req, res, next) {
 // Pricing tiers
 const PRICING_TIERS = {
   free: { price: 0, requests: 1000, storage: '1GB', support: 'community' },
-  starter: { price: 29, requests: 10000, storage: '10GB', support: 'email' },
+  starter: { price: 39, requests: 10000, storage: '10GB', support: 'email' },
   pro: { price: 99, requests: 100000, storage: '100GB', support: 'priority' },
   enterprise: { price: 499, requests: -1, storage: '1TB', support: 'dedicated' },
 };
 
 // Payment methods
-const PAYMENT_METHODS = ['credit_card', 'bank_transfer'];
+const PAYMENT_METHODS = ['credit_card', 'bank_transfer', 'paypal'];
 
 // Get current subscription
 app.get('/api/v2/billing/subscription', authenticateToken, (req, res) => {
