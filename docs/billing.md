@@ -10,8 +10,8 @@ SecureAPI offers four pricing tiers to fit your needs:
 | Tier       | Monthly Price | API Requests | Storage | Support     |
 |------------|---------------|--------------|---------|-------------|
 | Free       | $0            | 1,000        | 1 GB    | Community   |
-| Starter    | $29/month     | 10,000       | 10 GB   | Email       |
-| Pro        | $99/month     | 100,000      | 100 GB  | Priority    |
+| Starter    | $39/month     | 10,000       | 10 GB   | Email       |
+| Pro        | $129/month    | 100,000      | 100 GB  | Priority    |
 | Enterprise | $499/month    | Unlimited    | 1 TB    | Dedicated   |
 
 ### Free Tier
@@ -55,6 +55,8 @@ SecureAPI currently accepts the following payment methods:
 
 - **Credit Card** - Visa, Mastercard, American Express
 - **Bank Transfer** - Available for annual plans only
+- **PayPal** - Accepted for all billing tiers
+- **Stripe** - Accepted for all billing tiers
 
 ## Changing Your Plan
 

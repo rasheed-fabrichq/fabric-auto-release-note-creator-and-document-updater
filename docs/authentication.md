@@ -44,7 +44,7 @@ in the Authorization header:
 | Algorithm            | HS256          | HMAC with SHA-256                 |
 | Max Login Attempts   | 5              | Account locks after 5 failures    |
 | Lockout Duration     | 15 minutes     | Automatic unlock after 15 minutes |
-| Min Password Length  | 8 characters   | Minimum password requirement      |
+| Min Password Length  | 10 characters  | Minimum password requirement      |
 
 ## Refreshing a Token
 
