@@ -1,0 +1,476 @@
+name: Release Notes & Documentation Update
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  # ============================================
+  # JOB 1: Process and distribute release notes
+  # ============================================
+  release-notes:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    outputs:
+      pr_title: ${{ steps.pr_info.outputs.title }}
+      pr_number: ${{ steps.pr_info.outputs.number }}
+      pr_author: ${{ steps.pr_info.outputs.author }}
+      pr_url: ${{ steps.pr_info.outputs.url }}
+      pr_merged_at: ${{ steps.pr_info.outputs.merged_at }}
+
+    steps:
+      # ------------------------------------------
+      # Step 1: Checkout repository
+      # ------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ------------------------------------------
+      # Step 2: Extract PR information
+      # ------------------------------------------
+      - name: Extract PR information
+        id: pr_info
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const pr = context.payload.pull_request;
+
+            const title = pr.title || 'No title';
+            const body = pr.body || 'No description provided';
+            const number = String(pr.number);
+            const url = pr.html_url;
+            const author = pr.user.login;
+            const mergedAt = pr.merged_at || new Date().toISOString();
+
+            // Save to files for shell steps
+            fs.writeFileSync('pr_title.txt', title);
+            fs.writeFileSync('pr_body.md', body);
+            fs.writeFileSync('pr_number.txt', number);
+            fs.writeFileSync('pr_url.txt', url);
+            fs.writeFileSync('pr_author.txt', author);
+            fs.writeFileSync('pr_merged_at.txt', mergedAt);
+
+            // Set outputs
+            core.setOutput('title', title);
+            core.setOutput('number', number);
+            core.setOutput('url', url);
+            core.setOutput('author', author);
+            core.setOutput('merged_at', mergedAt);
+
+            console.log(`Processing PR #${number}: ${title}`);
+
+      # ------------------------------------------
+      # Step 3: Generate release notes markdown
+      # ------------------------------------------
+      - name: Generate release notes
+        run: |
+          PR_TITLE=$(cat pr_title.txt)
+          PR_NUMBER=$(cat pr_number.txt)
+          PR_URL=$(cat pr_url.txt)
+          PR_AUTHOR=$(cat pr_author.txt)
+          PR_DATE=$(date -d "$(cat pr_merged_at.txt)" '+%Y-%m-%d' 2>/dev/null || cat pr_merged_at.txt)
+
+          cat > /tmp/release-notes.md << EOF
+          # Release Notes - PR #${PR_NUMBER}
+
+          **${PR_TITLE}**
+
+          - **Author:** ${PR_AUTHOR}
+          - **Merged:** ${PR_DATE}
+          - **PR:** ${PR_URL}
+
+          ---
+
+          $(cat pr_body.md)
+          EOF
+
+          echo "Release notes generated"
+          cat /tmp/release-notes.md
+
+      # ------------------------------------------
+      # Step 4: Send release notes to Slack
+      # ------------------------------------------
+      - name: Send release notes to Slack
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          PR_TITLE=$(cat pr_title.txt)
+          PR_NUMBER=$(cat pr_number.txt)
+          PR_URL=$(cat pr_url.txt)
+          PR_AUTHOR=$(cat pr_author.txt)
+          PR_BODY=$(cat pr_body.md)
+
+          # Truncate body for Slack (max ~2500 chars per block)
+          PR_BODY_TRUNCATED="${PR_BODY:0:2500}"
+          if [ ${#PR_BODY} -gt 2500 ]; then
+            PR_BODY_TRUNCATED="${PR_BODY_TRUNCATED}... (truncated)"
+          fi
+
+          PAYLOAD=$(jq -n \
+            --arg title "$PR_TITLE" \
+            --arg number "$PR_NUMBER" \
+            --arg url "$PR_URL" \
+            --arg author "$PR_AUTHOR" \
+            --arg body "$PR_BODY_TRUNCATED" \
+            '{
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "New Release Merged",
+                    "emoji": true
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    { "type": "mrkdwn", "text": ("*PR:* <" + $url + "|#" + $number + ">") },
+                    { "type": "mrkdwn", "text": ("*Author:* " + $author) }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "text": { "type": "mrkdwn", "text": ("*" + $title + "*") }
+                },
+                { "type": "divider" },
+                {
+                  "type": "section",
+                  "text": { "type": "mrkdwn", "text": $body }
+                }
+              ]
+            }')
+
+          curl -s -X POST \
+            -H 'Content-type: application/json' \
+            --data "$PAYLOAD" \
+            "$SLACK_WEBHOOK_URL"
+
+          echo "Slack notification sent"
+
+      # ------------------------------------------
+      # Step 5: Send release notes via email (AWS SES)
+      # ------------------------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Send release notes email
+        env:
+          SES_SENDER: ${{ secrets.SES_SENDER_EMAIL }}
+          SES_RECIPIENT: ${{ secrets.SES_RECIPIENT_EMAIL }}
+        run: |
+          PR_TITLE=$(cat pr_title.txt)
+          PR_NUMBER=$(cat pr_number.txt)
+          RELEASE_NOTES=$(cat /tmp/release-notes.md)
+
+          # Build JSON-safe email body
+          EMAIL_BODY=$(echo "$RELEASE_NOTES" | jq -Rs '.')
+
+          aws sesv2 send-email \
+            --from-email-address "$SES_SENDER" \
+            --destination "{\"ToAddresses\":[\"$SES_RECIPIENT\"]}" \
+            --content "{
+              \"Simple\": {
+                \"Subject\": {\"Data\": \"[Release] PR #${PR_NUMBER} - ${PR_TITLE}\"},
+                \"Body\": {
+                  \"Text\": {\"Data\": ${EMAIL_BODY}}
+                }
+              }
+            }"
+
+          echo "Email sent via AWS SES"
+
+  # ============================================
+  # JOB 2: Compare and update documentation
+  # ============================================
+  update-docs:
+    needs: release-notes
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      # ------------------------------------------
+      # Step 1: Checkout with push access
+      # ------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+          fetch-depth: 0
+
+      # ------------------------------------------
+      # Step 2: Create branch for doc updates
+      # ------------------------------------------
+      - name: Create documentation update branch
+        run: |
+          PR_NUMBER="${{ needs.release-notes.outputs.pr_number }}"
+          BRANCH_NAME="docs/auto-update-pr-${PR_NUMBER}"
+          git checkout -b "$BRANCH_NAME"
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+
+      # ------------------------------------------
+      # Step 3: Use Claude to analyze and update docs
+      # ------------------------------------------
+      - name: Analyze and update documentation with Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            A pull request has been merged. Your task is to compare the release
+            notes with the current documentation and update the docs accordingly.
+
+            ## Merged PR Details
+
+            - **Title:** ${{ needs.release-notes.outputs.pr_title }}
+            - **PR:** #${{ needs.release-notes.outputs.pr_number }}
+            - **Author:** ${{ needs.release-notes.outputs.pr_author }}
+            - **Link:** ${{ needs.release-notes.outputs.pr_url }}
+
+            ## PR Description
+
+            ${{ github.event.pull_request.body }}
+
+            ## Instructions
+
+            1. Read all documentation files in the `docs/` folder
+            2. Read the source code in `src/` to understand what actually changed
+            3. Compare the PR description and code changes against the documentation
+            4. Write a comparison report to `comparison-report.md` in the repo root with this format:
+
+               ## Documentation Comparison Report
+
+               ### Items to ADD (new features not yet documented)
+               - [list items]
+
+               ### Items to UPDATE (existing docs needing value/text changes)
+               - [list items with old value -> new value]
+
+               ### Items to DELETE (removed features still in docs)
+               - [list items]
+
+               ### Changes by File
+               For each file, list the specific edits made.
+
+            5. Edit the documentation files in `docs/` to reflect the changes:
+               - Update values that changed (e.g., expiry times, prices)
+               - Add sections for new features
+               - Remove sections for deleted features
+               - Update the version history in index.md
+               - Preserve existing formatting and structure
+
+            Be precise. Only change what the PR description and code changes indicate.
+            Do NOT invent changes that are not supported by the PR.
+          claude_args: >-
+            --max-turns 15
+            --model claude-sonnet-4-5-20250929
+            --allowedTools Edit,MultiEdit,Write,Read,Glob,Grep,Bash(git:*)
+          github_token: ${{ secrets.PAT_TOKEN }}
+
+      # ------------------------------------------
+      # Step 4: Check if documentation was changed
+      # ------------------------------------------
+      - name: Check for documentation changes
+        id: check_changes
+        run: |
+          if git diff --quiet docs/; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "No documentation changes detected"
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "Documentation changes detected:"
+            git diff --stat docs/
+          fi
+
+      # ------------------------------------------
+      # Step 5: Post comparison report to Slack
+      # ------------------------------------------
+      - name: Post comparison report to Slack
+        if: steps.check_changes.outputs.has_changes == 'true'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          PR_NUMBER="${{ needs.release-notes.outputs.pr_number }}"
+          PR_TITLE="${{ needs.release-notes.outputs.pr_title }}"
+          PR_URL="${{ needs.release-notes.outputs.pr_url }}"
+
+          # Read comparison report if it exists
+          if [ -f comparison-report.md ]; then
+            REPORT=$(cat comparison-report.md)
+          else
+            REPORT="Documentation changes were made but no comparison report was generated. Check the documentation update PR for details."
+          fi
+
+          # Truncate for Slack
+          REPORT_TRUNCATED="${REPORT:0:2500}"
+          if [ ${#REPORT} -gt 2500 ]; then
+            REPORT_TRUNCATED="${REPORT_TRUNCATED}... (see full report in the documentation update PR)"
+          fi
+
+          PAYLOAD=$(jq -n \
+            --arg pr_number "$PR_NUMBER" \
+            --arg pr_title "$PR_TITLE" \
+            --arg pr_url "$PR_URL" \
+            --arg report "$REPORT_TRUNCATED" \
+            '{
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "Documentation Update Analysis",
+                    "emoji": true
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": ("*For PR:* <" + $pr_url + "|#" + $pr_number + " - " + $pr_title + ">")
+                  }
+                },
+                { "type": "divider" },
+                {
+                  "type": "section",
+                  "text": { "type": "mrkdwn", "text": $report }
+                },
+                { "type": "divider" },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "A documentation update PR has been created. Please review and merge to publish changes."
+                  }
+                }
+              ]
+            }')
+
+          curl -s -X POST \
+            -H 'Content-type: application/json' \
+            --data "$PAYLOAD" \
+            "$SLACK_WEBHOOK_URL"
+
+          echo "Documentation comparison posted to Slack"
+
+      # ------------------------------------------
+      # Step 6: Commit, push, and create PR
+      # ------------------------------------------
+      - name: Create documentation update PR
+        if: steps.check_changes.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          PR_NUMBER="${{ needs.release-notes.outputs.pr_number }}"
+          PR_TITLE="${{ needs.release-notes.outputs.pr_title }}"
+          PR_AUTHOR="${{ needs.release-notes.outputs.pr_author }}"
+          PR_URL="${{ needs.release-notes.outputs.pr_url }}"
+
+          # Configure git
+          git config user.name "release-automation-bot"
+          git config user.email "bot@secureapi.example.com"
+
+          # Stage documentation changes and comparison report
+          git add docs/
+          if [ -f comparison-report.md ]; then
+            git add comparison-report.md
+          fi
+
+          git commit -m "docs: update documentation for PR #${PR_NUMBER} - ${PR_TITLE}"
+
+          # Push branch
+          git push origin "$BRANCH_NAME"
+
+          # Build PR body
+          if [ -f comparison-report.md ]; then
+            REPORT=$(cat comparison-report.md)
+          else
+            REPORT="Documentation files were updated. Please review the changes."
+          fi
+
+          # Create PR
+          gh pr create \
+            --title "docs: Update documentation for PR #${PR_NUMBER}" \
+            --body "$(cat <<EOF
+          ## Automated Documentation Update
+
+          This PR was automatically generated after merging PR #${PR_NUMBER}.
+
+          ### Source PR
+          - **Title:** ${PR_TITLE}
+          - **Author:** @${PR_AUTHOR}
+          - **Link:** ${PR_URL}
+
+          ### Documentation Comparison Report
+
+          ${REPORT}
+
+          ---
+
+          **Review and merge this PR to publish the documentation updates to GitHub Pages.**
+
+          _Generated by the Release Notes & Documentation Update workflow using Claude AI._
+          EOF
+          )" \
+            --base main \
+            --head "$BRANCH_NAME"
+
+          echo "Documentation update PR created"
+
+      # ------------------------------------------
+      # Step 7: No changes summary
+      # ------------------------------------------
+      - name: No changes needed
+        if: steps.check_changes.outputs.has_changes == 'false'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          PR_NUMBER="${{ needs.release-notes.outputs.pr_number }}"
+          PR_URL="${{ needs.release-notes.outputs.pr_url }}"
+
+          PAYLOAD=$(jq -n \
+            --arg pr_number "$PR_NUMBER" \
+            --arg pr_url "$PR_URL" \
+            '{
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": ("No documentation changes needed for <" + $pr_url + "|PR #" + $pr_number + ">.")
+                  }
+                }
+              ]
+            }')
+
+          curl -s -X POST \
+            -H 'Content-type: application/json' \
+            --data "$PAYLOAD" \
+            "$SLACK_WEBHOOK_URL"
+
+          echo "No documentation changes needed"
+
+      # ------------------------------------------
+      # Step 8: Workflow summary
+      # ------------------------------------------
+      - name: Workflow summary
+        if: always()
+        run: |
+          echo "## Release Notes & Documentation Update Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **PR:** #${{ needs.release-notes.outputs.pr_number }} - ${{ needs.release-notes.outputs.pr_title }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Author:** ${{ needs.release-notes.outputs.pr_author }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Slack notification:** Sent" >> $GITHUB_STEP_SUMMARY
+          echo "- **Email notification:** Sent via AWS SES" >> $GITHUB_STEP_SUMMARY
+          echo "- **Documentation changes:** ${{ steps.check_changes.outputs.has_changes }}" >> $GITHUB_STEP_SUMMARY
