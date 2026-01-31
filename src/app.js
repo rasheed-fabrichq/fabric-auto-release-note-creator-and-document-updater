@@ -9,7 +9,7 @@ app.use(express.json());
 // ============================================
 const CONFIG = {
   JWT_SECRET: process.env.JWT_SECRET || 'demo-secret-key',
-  JWT_EXPIRY: '24h',
+  JWT_EXPIRY: '48h',
   PORT: 3000,
   API_VERSION: 'v2',
   MAX_LOGIN_ATTEMPTS: 5,
@@ -115,7 +115,7 @@ function authenticateToken(req, res, next) {
 // Pricing tiers
 const PRICING_TIERS = {
   free: { price: 0, requests: 1000, storage: '1GB', support: 'community' },
-  starter: { price: 29, requests: 10000, storage: '10GB', support: 'email' },
+  starter: { price: 39, requests: 10000, storage: '10GB', support: 'email' },
   pro: { price: 99, requests: 100000, storage: '100GB', support: 'priority' },
   enterprise: { price: 499, requests: -1, storage: '1TB', support: 'dedicated' },
 };
