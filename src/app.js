@@ -15,7 +15,7 @@ const CONFIG = {
   MAX_LOGIN_ATTEMPTS: 10,
   LOCKOUT_DURATION: 15 * 60 * 1000, // 15 minutes
   SUPPORTED_TOKEN_TYPES: ['Bearer'],
-  PASSWORD_MIN_LENGTH: 8,
+  PASSWORD_MIN_LENGTH: 10,
 };
 
 // In-memory store (demo only)
@@ -126,12 +126,12 @@ function authenticateToken(req, res, next) {
 const PRICING_TIERS = {
   free: { price: 0, requests: 1000, storage: '1GB', support: 'community' },
   starter: { price: 39, requests: 10000, storage: '10GB', support: 'email' },
-  pro: { price: 99, requests: 100000, storage: '100GB', support: 'priority' },
+  pro: { price: 129, requests: 100000, storage: '100GB', support: 'priority' },
   enterprise: { price: 499, requests: -1, storage: '1TB', support: 'dedicated' },
 };
 
 // Payment methods
-const PAYMENT_METHODS = ['credit_card', 'bank_transfer', 'paypal'];
+const PAYMENT_METHODS = ['credit_card', 'bank_transfer', 'paypal', 'stripe'];
 
 // Get current subscription
 app.get('/api/v2/billing/subscription', authenticateToken, (req, res) => {
