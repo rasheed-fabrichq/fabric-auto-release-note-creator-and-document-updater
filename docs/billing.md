@@ -1,5 +1,6 @@
 # Billing Guide
 
+
 This guide covers SecureAPI pricing tiers, payment methods, and invoice
 management.
 
