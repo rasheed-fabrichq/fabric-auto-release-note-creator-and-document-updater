@@ -578,30 +578,118 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
-            A pull request was merged in the SOURCE code repository. Update the DOCUMENTATION repository accordingly.
+            ### 🔐 SYSTEM KERNEL: REVENUE-SYNC RECONCILIATION ENGINE (V4.1)
+
+            **ROLE PROFILE:**
+            You are the **Principal Documentation Architect** for a high-velocity engineering team. Your directive is to maintain a "Single Source of Truth" by reconciling the **Current Product Documentation** with the **New Release Note/PR Description**.
 
             ## Source PR Details
             - **PR #${{ needs.release-notes.outputs.pr_number }}:** ${{ needs.release-notes.outputs.pr_title }}
             - **Author:** ${{ needs.release-notes.outputs.pr_author }}
             - **Link:** ${{ needs.release-notes.outputs.pr_url }}
 
-            ## PR Description
+            ## PR Description (New Release Note)
             ${{ github.event.pull_request.body }}
 
-            ## Task
-            1. **Read source code:** `source-repo/src/app.js` to verify actual changes
-            2. **Read all docs:** `docs-repo/docs/*.md` files
-            3. **Create comparison report:** Write to `docs-repo/comparison-report.md` with:
-               - Items to ADD (new features not documented)
-               - Items to UPDATE (changed values: old → new)
-               - Items to DELETE (removed features still in docs)
-               - Changes by file
-            4. **Update documentation files** in `docs-repo/docs/` to match the code:
-               - Update changed values (prices, timeouts, limits, etc.)
-               - Add new feature sections
-               - Remove deprecated feature sections
-               - Update version history in index.md
-               - Keep existing formatting
+            ## Current Documentation Location
+            - **Source code:** `source-repo/src/app.js` (to verify actual changes)
+            - **Documentation files:** `docs-repo/docs/*.md` (Current Product Education Document)
+
+            **THE PRIME DIRECTIVE (ZERO STALENESS):**
+            You act as a filter for "User Agency."
+
+            1. **If the User cannot control it, the User does not read about it.**
+               - Example: If a setting is moved to the backend, you do **not** explain "This is now handled by the backend." You **DELETE** the instruction entirely.
+
+            2. **If a feature is deprecated:** It must be **physically eradicated** from the text. No "legacy" headers. No footnotes.
+
+            3. **If a feature is added:** It must be surgically inserted into the correct logical flow, **NEVER** appended after the "Conclusion."
+
+            ---
+
+            ### 🧠 COGNITIVE PROCESS (INTERNAL CHAIN OF THOUGHT)
+
+            Before making changes, perform this internal audit sequence:
+
+            **STEP 1: THE "AGENCY CHECK" (CRITICAL)**
+            - Scan the PR Description for phrases like: _"removed from UI," "standardized," "backend managed," "automated,"_ or _"deprecated."_
+            - Locate the corresponding instructions in the Current Doc (e.g., "Click Edit to change the Score").
+            - **DECISION:**
+              - Can the user still perform this action? **No.**
+              - **ACTION:** DELETE the sentence. Do **not** replace it with an explanation of _why_ they can't do it. Just remove it.
+
+            **STEP 2: THE "SPLIT SENTENCE" LOGIC**
+            - _Scenario:_ The doc says: "You can configure **[Feature A]** and **[Feature B]** in the settings."
+            - _Update:_ **Feature B** is removed.
+            - _Incorrect Action:_ Delete the whole sentence (Lost info on Feature A).
+            - _Incorrect Action:_ Keep sentence but add "Feature B is gone" (Zombie text).
+            - _Correct Action:_ Rewrite the sentence to: "You can configure **[Feature A]** in the settings."
+
+            **STEP 3: STRUCTURAL PLACEMENT**
+            - Where does this new feature belong? (e.g., "Security" features go in "Security Section").
+            - **Constraint:** Never place new content after the "Wrapping Up" or "Conclusion" header.
+
+            ---
+
+            ### 🛡️ EXECUTION PROTOCOLS
+
+            **1. RUTHLESS PRUNING (DELETION):**
+            - **Action:** When a feature is removed, the text must be completely removed from the documentation.
+            - **Verification:** Ensure the deleted text does not appear in the final document.
+            - **No Ghosting:** Do not leave empty headers if all their content was deleted. Delete the header too.
+
+            **2. CONTEXTUAL INJECTION (ADDITION):**
+            - **Action:** Insert new text into the most relevant topical section.
+            - **Flow:** Ensure the transition is smooth. Do not use phrases like "Note: New feature added." Just write the instruction.
+
+            **3. VALUE UPDATES:**
+            - Update changed values precisely (prices, timeouts, limits, etc.)
+            - Maintain existing formatting and structure
+            - Update version history in index.md
+
+            ---
+
+            ### 📋 REQUIRED TASKS
+
+            1. **Read source code:** `source-repo/src/app.js` to verify actual changes in the codebase
+            2. **Read all documentation files:** Use Glob to find all `docs-repo/docs/*.md` files, then read each one
+            3. **Apply changes** using the Edit tool to update documentation files in `docs-repo/docs/`:
+               - DELETE deprecated features completely (no explanations)
+               - UPDATE changed values (prices, limits, timeouts)
+               - ADD new features in appropriate sections (never after Conclusion)
+               - UPDATE version history in index.md
+            4. **Create comparison report:** Write to `docs-repo/comparison-report.md` with markdown format:
+
+            ```markdown
+            ## Documentation Comparison Report
+
+            ### Summary
+            - Files changed: [number]
+            - Confidence level: [high/medium/low]
+
+            ### Changes Applied
+
+            #### [filename.md]
+            - **Action:** [ADD/UPDATE/DELETE]
+            - **Section:** [Header name]
+            - **Change:** [Description]
+            - **Rationale:** [Why this change was needed]
+            - **Old value:** [if UPDATE/DELETE]
+            - **New value:** [if UPDATE/ADD]
+
+            ### Hesitations
+            [Any uncertainties or items requiring human review]
+            ```
+
+            ---
+
+            ### 🛑 FINAL VALIDATION (SELF-CORRECTION)
+
+            Before finishing, verify:
+            - **Did I explain a deleted feature?** (If yes, DELETE that explanation. The user cannot use it, so they don't care.)
+            - **Is the Conclusion last?** (Ensure no new features appear after the wrapping-up section.)
+            - **Are empty headers removed?** (If a section has no content after deletions, remove the header.)
+            - **Are new features in the right section?** (Not at the end of the document.)
 
             **Important:** Only change what the PR description explicitly mentions. Don't invent changes.
           claude_args: >-
@@ -705,6 +793,7 @@ jobs:
         working-directory: docs-repo
         env:
           GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           PR_NUMBER="${{ needs.release-notes.outputs.pr_number }}"
           PR_TITLE="${{ needs.release-notes.outputs.pr_title }}"
@@ -733,8 +822,8 @@ jobs:
             REPORT="Documentation files were updated. Please review the changes."
           fi
 
-          # Create PR in the DOCS repository
-          gh pr create \
+          # Create PR in the DOCS repository and capture URL
+          DOCS_PR_URL=$(gh pr create \
             --repo rasheed-fabrichq/fabric-auto-release-notes-docs \
             --title "docs: Update for source PR #${PR_NUMBER}" \
             --body "$(cat <<EOF
@@ -760,9 +849,32 @@ jobs:
           EOF
           )" \
             --base main \
-            --head "$BRANCH_NAME"
+            --head "$BRANCH_NAME")
 
-          echo "Documentation update PR created"
+          echo "Documentation update PR created: $DOCS_PR_URL"
+
+          # Send Slack notification with PR link
+          PAYLOAD=$(jq -n \
+            --arg docs_pr_url "$DOCS_PR_URL" \
+            --arg pr_number "$PR_NUMBER" \
+            '{
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": ("📝 *Documentation PR created for source PR #" + $pr_number + "*\n\n<" + $docs_pr_url + "|View and merge documentation updates>\n\nPlease review and merge to publish changes to GitHub Pages.")
+                  }
+                }
+              ]
+            }')
+
+          curl -s -X POST \
+            -H 'Content-type: application/json' \
+            --data "$PAYLOAD" \
+            "${SLACK_WEBHOOK_URL}"
+
+          echo "Docs PR link sent to Slack"
 
       # ------------------------------------------
       # Step 7: No changes summary
